@@ -245,10 +245,23 @@ export function AuthView({ existingOrg, onLogin, onRegister }: AuthViewProps) {
   const [logoUrl, setLogoUrl] = useState(existingOrg?.logoUrl ?? '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setTermsAccepted(false);
+    setError('');
+  }, [role, mode]);
 
   const handleSubmit = async () => {
     setError('');
+
+    if (mode === 'register' && !termsAccepted) {
+      setError('You must accept the Terms & Conditions before registering.');
+      return;
+    }
+
     if (role === 'driver') {
       const success = await onLogin(email.trim(), password);
       if (!success) {
@@ -368,18 +381,97 @@ export function AuthView({ existingOrg, onLogin, onRegister }: AuthViewProps) {
           />
         </label>
 
+        {mode === 'register' && (
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
+              <input
+                id="terms-acceptance"
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(event) => setTermsAccepted(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+              />
+              <label htmlFor="terms-acceptance" className="text-sm leading-6 text-slate-200">
+                I agree to the Terms & Conditions and Release of Liability
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTermsModal(true)}
+              className="text-sm font-medium text-cyan-400 underline-offset-4 hover:text-cyan-300 hover:underline"
+            >
+              Read terms
+            </button>
+          </div>
+        )}
+
         {error && <p className="text-sm text-rose-400">{error}</p>}
 
         <button
           type="button"
           onClick={handleSubmit}
-          className="rounded-2xl bg-cyan-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+          disabled={mode === 'register' && !termsAccepted}
+          className={`rounded-2xl px-6 py-3 text-sm font-semibold text-slate-950 transition ${mode === 'register' && !termsAccepted ? 'cursor-not-allowed bg-slate-600 opacity-60' : 'bg-cyan-500 hover:bg-cyan-400'}`}
         >
           {role === 'driver' ? 'Driver Sign In' : mode === 'login' ? 'Company Sign In' : 'Register Company'}
         </button>
 
         {/* Quick local dev login removed for production */}
       </div>
+
+      {showTermsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[2rem] border border-slate-700 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-2xl font-semibold text-white">Terms & Conditions</h2>
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:border-slate-500 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 max-h-[60vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-5 text-sm leading-7 text-slate-300">
+              <p>
+                BSFO is provided on an as-is basis. The platform, its software, infrastructure, and related services are
+                offered without warranties of any kind, whether express or implied, including warranties of
+                merchantability, fitness for a particular purpose, availability, performance, or error-free operation.
+              </p>
+
+              <p className="mt-4">
+                By using BSFO, users acknowledge and accept that software errors, system outages, operational delays,
+                data inaccuracies, communication failures, and other disruptions may occur. In no event shall the
+                platform, its creators, operators, affiliates, or contributors be liable for any direct, indirect,
+                incidental, consequential, special, or punitive damages, including loss of revenue, delayed shipments,
+                business interruption, equipment damage, or other losses arising from platform use or reliance on the
+                service.
+              </p>
+
+              <p className="mt-4">
+                Users release the platform and its creators from any liability related to software failures, delays,
+                operational issues, damages, or losses connected with the use of BSFO, including claims resulting from
+                missed deadlines, misrouting, inaccurate status updates, or service interruptions.
+              </p>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setTermsAccepted(true);
+                  setShowTermsModal(false);
+                }}
+                className="rounded-2xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
+              >
+                I agree
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
