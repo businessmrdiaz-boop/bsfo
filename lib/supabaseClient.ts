@@ -1,10 +1,28 @@
+/**
+ * lib/supabaseClient.ts
+ * Cliente Supabase para el frontend (App Router).
+ *
+ * Coloca este archivo en: <tu-proyecto>/lib/supabaseClient.ts
+ *
+ * Requisitos de env:
+ * - NEXT_PUBLIC_SUPABASE_URL
+ * - NEXT_PUBLIC_SUPABASE_ANON_KEY
+ *
+ * Nunca uses service_role en el cliente.
+ */
+
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local');
+if (!url || !anonKey) {
+  throw new Error('Faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY en el env');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(url, anonKey, {
+  auth: {
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
