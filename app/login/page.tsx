@@ -24,6 +24,9 @@ export default function LoginPage() {
 
   const handleRoleChange = (nextRole: Role) => {
     setRole(nextRole);
+    if (nextRole === 'driver') {
+      setMode('login');
+    }
     setTermsAccepted(false);
     setError('');
     setNotice('');
@@ -48,6 +51,11 @@ export default function LoginPage() {
 
     if (mode === 'register' && !termsAccepted) {
       setError('You must accept the Terms & Conditions before registering.');
+      return;
+    }
+
+    if (role === 'driver' && mode === 'register') {
+      setError('Driver accounts are created by a company invitation.');
       return;
     }
 
@@ -175,15 +183,17 @@ export default function LoginPage() {
             >
               Login
             </button>
-            <button
-              type="button"
-              onClick={() => handleModeChange('register')}
-              className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
-                mode === 'register' ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Register
-            </button>
+            {role === 'company' && (
+              <button
+                type="button"
+                onClick={() => handleModeChange('register')}
+                className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
+                  mode === 'register' ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                Register
+              </button>
+            )}
           </div>
 
           <form className="mt-8 grid gap-6" onSubmit={handleSubmit}>

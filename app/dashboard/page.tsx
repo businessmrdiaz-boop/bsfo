@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { Sidebar } from '../../components/Sidebar';
 import type { Shipment, Driver, CompanyProfile, Transaction } from '../../components/types';
-import { recentShipments } from '../../components/data';
 import { AnalyticsView, AuditLogsView, AuthView, BillingView, DashboardView, DriversView, MyTripsView, SettingsView, ShipmentsView, TripDetailsView } from '../../components/views/SectionViews';
 import { supabase } from '../../lib/supabaseClient';
 
 const NOTIF_KEY = 'bsfo-notifications';
+type UserRole = 'company' | 'driver';
 
 interface Notification {
   id: string;
@@ -25,53 +25,13 @@ export default function Page() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [organization, setOrganization] = useState<CompanyProfile | null>(null);
   const [currentDriver, setCurrentDriver] = useState<Driver | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [localDevReady, setLocalDevReady] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isBellOpen, setIsBellOpen] = useState(false);
-  const [userRole, setUserRole] = useState<'company' | 'driver' | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'dashboard' | 'shipments' | 'drivers' | 'billing' | 'audit-logs' | 'settings' | 'business-analytics' | 'my-trips' | 'trip-details'>('dashboard');
-
-  useEffect(() => {
-    const initializeAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        setUser(session.user);
-        setIsAuthenticated(true);
-        await loadAuthenticatedContext(session.user.id);
-      }
-
-      setLocalDevReady(true);
-    };
-
-    initializeAuth();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        setIsAuthenticated(true);
-        await loadAuthenticatedContext(session.user.id);
-      } else {
-        setUser(null);
-        setOrganization(null);
-        setCurrentDriver(null);
-        setShipments([]);
-        setDrivers([]);
-        setIsAuthenticated(false);
-        setUserRole(null);
-        setSelectedTripId(null);
-      }
-    });
-
-    return () => {
-      authListener.subscription?.unsubscribe();
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -94,7 +54,7 @@ export default function Page() {
   const loadCompanyProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from('companies')
-      .select('id, name, logoUrl, user_id')
+      .select('id, name, logoUrl:logo_url, user_id')
       .eq('user_id', userId)
       .single();
 
@@ -124,18 +84,66 @@ export default function Page() {
     return data;
   };
 
-  const loadAuthenticatedContext = async (userId: string) => {
-    const driver = await loadDriverProfile(userId);
+  const resolveUserRole = async (authenticatedUser: User): Promise<UserRole | null> => {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', authenticatedUser.id)
+      .maybeSingle();
+
+    if (profile?.role === 'company' || profile?.role === 'driver') {
+      return profile.role;
+    }
+
+    const { data: driver } = await supabase
+      .from('drivers')
+      .select('id')
+      .eq('user_id', authenticatedUser.id)
+      .maybeSingle();
+
     if (driver) {
+      return 'driver';
+    }
+
+    const { data: company } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('user_id', authenticatedUser.id)
+      .maybeSingle();
+
+    if (company) {
+      return 'company';
+    }
+
+    return authenticatedUser.app_metadata?.role === 'driver' || authenticatedUser.app_metadata?.role === 'company'
+      ? authenticatedUser.app_metadata.role
+      : null;
+  };
+
+  const loadAuthenticatedContext = async (authenticatedUser: User) => {
+    const role = await resolveUserRole(authenticatedUser);
+    setUserRole(role);
+    setOrganization(null);
+    setCurrentDriver(null);
+    setShipments([]);
+    setDrivers([]);
+    setTransactions([]);
+
+    if (role === 'driver') {
+      const driver = await loadDriverProfile(authenticatedUser.id);
+      if (!driver) {
+        setCurrentDriver(null);
+        setShipments([]);
+        return;
+      }
+
       setUserRole('driver');
-      setOrganization(null);
-      setDrivers([]);
       setActiveView('my-trips');
       await fetchDriverShipments(driver.id);
       return;
     }
 
-    const company = await loadCompanyProfile(userId);
+    const company = await loadCompanyProfile(authenticatedUser.id);
     if (company) {
       setUserRole('company');
       setSelectedTripId(null);
@@ -164,7 +172,7 @@ export default function Page() {
     const { data, error } = await supabase
       .from('shipments')
       .select('*')
-      .eq('driverId', driverId)
+      .eq('driver_id', driverId)
       .order('created_at', { ascending: false });
 
     if (error || !data) {
@@ -202,18 +210,49 @@ export default function Page() {
     setTransactions(data);
   };
 
-  const handleAppendShipment = async (shipment: Shipment) => {
-    const insertData = organization
-      ? { ...shipment, company_id: organization.id }
-      : shipment;
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const { data, error } = await supabase.from('shipments').insert(insertData).select().single();
-    const savedShipment = data ?? shipment;
-    setShipments((current) => [savedShipment, ...current]);
-    createNotification('Ticket Uploaded', 'A new ticket upload has been synced through OCR.', 'success');
-  };
+      if (session?.user) {
+        setUser(session.user);
+        setIsAuthenticated(true);
+        await loadAuthenticatedContext(session.user);
+      }
+
+    };
+
+    initializeAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        setIsAuthenticated(true);
+        await loadAuthenticatedContext(session.user);
+      } else {
+        setUser(null);
+        setOrganization(null);
+        setCurrentDriver(null);
+        setShipments([]);
+        setDrivers([]);
+        setIsAuthenticated(false);
+        setUserRole(null);
+        setSelectedTripId(null);
+      }
+    });
+
+    return () => {
+      authListener.subscription?.unsubscribe();
+    };
+  }, []);
 
   const handleCreateInvoiceDraft = async (shipment: Shipment) => {
+    if (userRole !== 'company') {
+      return;
+    }
+
     const companyId = shipment.company_id ?? organization?.id;
     if (!companyId) {
       return;
@@ -267,7 +306,7 @@ export default function Page() {
     const userId = signUpData.user.id;
     const { data: companyData, error: companyError } = await supabase
       .from('companies')
-      .insert({ user_id: userId, name: companyName, logoUrl })
+      .insert({ user_id: userId, name: companyName, logo_url: logoUrl })
       .select()
       .single();
 
@@ -295,11 +334,15 @@ export default function Page() {
 
     setUser(data.user);
     setIsAuthenticated(true);
-    await loadAuthenticatedContext(data.user.id);
+    await loadAuthenticatedContext(data.user);
     return true;
   };
 
   const handleDriverAdd = async (driver: Driver) => {
+    if (userRole !== 'company' || !organization) {
+      return;
+    }
+
     const insertData = organization ? { ...driver, company_id: organization.id } : driver;
     const { data, error } = await supabase.from('drivers').insert(insertData).select().single();
     const savedDriver = data ?? driver;
@@ -308,6 +351,10 @@ export default function Page() {
   };
 
   const handleDriverStatusChange = async (driver: Driver, newStatus: string) => {
+    if (userRole !== 'company') {
+      return;
+    }
+
     if (driver.id) {
       await supabase.from('drivers').update({ status: newStatus }).eq('id', driver.id);
       setDrivers((current) =>
@@ -323,13 +370,7 @@ export default function Page() {
     createNotification('Invoice Generated', `Invoice ${invoiceNumber} was created and added to billing.`, 'success');
   };
 
-  useEffect(() => {
-    if (isAuthenticated && userRole === 'company') {
-      setActiveView('dashboard');
-    }
-  }, [isAuthenticated, userRole]);
-
-  const content = isAuthenticated ? (
+  const content = isAuthenticated && userRole ? (
     userRole === 'driver' ? (
       (() => {
         switch (activeView) {
@@ -375,12 +416,16 @@ export default function Page() {
                 companyId={organization?.id}
                 companyName={organization?.name}
                 shipments={shipments}
-                onAppendShipment={handleAppendShipment}
               />
             );
         }
       })()
     )
+  ) : isAuthenticated ? (
+    <section className="rounded-[2rem] border border-rose-900/70 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
+      <h2 className="text-2xl font-semibold text-white">Account access is unavailable</h2>
+      <p className="mt-3 text-slate-400">Your account is not linked to an approved company or driver profile.</p>
+    </section>
   ) : (
     <AuthView existingOrg={organization} onLogin={handleLogin} onRegister={handleRegister} />
   );
@@ -390,7 +435,12 @@ export default function Page() {
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
         <Sidebar
           activeView={activeView}
-          onNavigate={setActiveView}
+          onNavigate={(view) => {
+            if (userRole === 'driver' && view !== 'my-trips' && view !== 'trip-details') {
+              return;
+            }
+            setActiveView(view);
+          }}
           companyName={organization?.name ?? currentDriver?.name}
           companyLogoUrl={organization?.logoUrl}
           isDriver={userRole === 'driver'}
@@ -399,10 +449,16 @@ export default function Page() {
         <section className="space-y-10">
           <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.28em] text-slate-400">Operational Intelligence</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">{organization?.name ?? 'BSFO - GDO GROUP'}</h1>
+              <p className="text-sm uppercase tracking-[0.28em] text-slate-400">
+                {userRole === 'driver' ? 'Assigned Trips' : 'Operational Intelligence'}
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+                {userRole === 'driver' ? currentDriver?.name ?? 'Driver Portal' : organization?.name ?? 'BSFO - GDO GROUP'}
+              </h1>
               <p className="mt-2 max-w-2xl text-slate-400">
-                {organization?.name
+                {userRole === 'driver'
+                  ? 'View your assigned trips and submit delivery status updates.'
+                  : organization?.name
                   ? `Logistics and automated tracking for ${organization.name} field operations.`
                   : 'Logistics and automated tracking for the energy industry, tailored for high-efficiency field operations.'}
               </p>

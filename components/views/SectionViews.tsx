@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { StatCard } from '../StatCard';
-import { TicketScanner } from '../TicketScanner';
 import { RecentShipmentsTable } from '../RecentShipmentsTable';
 import { stats, auditLogs as seedAuditLogs, transactions as seedTransactions } from '../data';
 import type { AuditLog, Driver, Shipment, Transaction } from '../types';
@@ -12,7 +11,6 @@ interface DashboardViewProps {
   companyId?: string;
   companyName?: string;
   shipments: Shipment[];
-  onAppendShipment: (shipment: Shipment) => void;
 }
 
 interface ShipmentsViewProps {
@@ -53,7 +51,7 @@ interface AuthViewProps {
   onRegister: (companyName: string, logoUrl: string, email: string, password: string) => Promise<boolean> | boolean;
 }
 
-export function DashboardView({ companyId, companyName, shipments, onAppendShipment }: DashboardViewProps) {
+export function DashboardView({ companyId, companyName, shipments }: DashboardViewProps) {
   const [inviteLink, setInviteLink] = useState<string>('');
 
   const generateInviteLink = () => {
@@ -214,30 +212,6 @@ export function AnalyticsView({ shipments, transactions }: AnalyticsViewProps) {
   );
 }
 
-interface SectionPlaceholderProps {
-  title: string;
-  description: string;
-  bullets: string[];
-}
-
-function SectionPlaceholder({ title, description, bullets }: SectionPlaceholderProps) {
-  return (
-    <section className="rounded-[2rem] border border-slate-800/80 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
-      <p className="text-sm uppercase tracking-[0.3em] text-cyan-400">Operational View</p>
-      <h2 className="mt-3 text-2xl font-semibold text-white">{title}</h2>
-      <p className="mt-3 max-w-2xl text-slate-400">{description}</p>
-
-      <ul className="mt-6 space-y-3 text-sm text-slate-300">
-        {bullets.map((bullet) => (
-          <li key={bullet} className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3">
-            {bullet}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 export function AuthView({ existingOrg, onLogin, onRegister }: AuthViewProps) {
   const [role, setRole] = useState<'company' | 'driver'>('company');
   const [mode, setMode] = useState<'login' | 'register'>(existingOrg ? 'login' : 'register');
@@ -256,6 +230,11 @@ export function AuthView({ existingOrg, onLogin, onRegister }: AuthViewProps) {
 
   const handleSubmit = async () => {
     setError('');
+
+    if (role === 'driver' && mode === 'register') {
+      setError('Driver accounts are created by a company invitation.');
+      return;
+    }
 
     if (mode === 'register' && !termsAccepted) {
       setError('You must accept the Terms & Conditions before registering.');
@@ -311,7 +290,10 @@ export function AuthView({ existingOrg, onLogin, onRegister }: AuthViewProps) {
           </button>
           <button
             type="button"
-            onClick={() => setRole('driver')}
+            onClick={() => {
+              setRole('driver');
+              setMode('login');
+            }}
             className={`rounded-2xl px-4 py-2 text-sm font-medium ${role === 'driver' ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:text-white'}`}
           >
             I am a Driver
@@ -327,13 +309,15 @@ export function AuthView({ existingOrg, onLogin, onRegister }: AuthViewProps) {
           >
             Login
           </button>
-          <button
-            type="button"
-            onClick={() => setMode('register')}
-            className={`rounded-2xl px-4 py-2 text-sm font-medium ${mode === 'register' ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:text-white'}`}
-          >
-            Register
-          </button>
+          {role === 'company' && (
+            <button
+              type="button"
+              onClick={() => setMode('register')}
+              className={`rounded-2xl px-4 py-2 text-sm font-medium ${mode === 'register' ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:text-white'}`}
+            >
+              Register
+            </button>
+          )}
         </div>
 
       <div className="mt-8 grid gap-6">
