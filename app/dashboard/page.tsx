@@ -115,9 +115,12 @@ export default function Page() {
       return 'company';
     }
 
-    return authenticatedUser.app_metadata?.role === 'driver' || authenticatedUser.app_metadata?.role === 'company'
-      ? authenticatedUser.app_metadata.role
-      : null;
+    const appRole = authenticatedUser.app_metadata?.role;
+    if (appRole === 'driver' || appRole === 'company') {
+      return appRole;
+    }
+
+    return 'company';
   };
 
   const loadAuthenticatedContext = async (authenticatedUser: User) => {
@@ -132,6 +135,9 @@ export default function Page() {
     if (role === 'driver') {
       const driver = await loadDriverProfile(authenticatedUser.id);
       if (!driver) {
+        setUserRole('company');
+        setSelectedTripId(null);
+        setActiveView('dashboard');
         setCurrentDriver(null);
         setShipments([]);
         return;
@@ -151,7 +157,9 @@ export default function Page() {
       return;
     }
 
-    setUserRole(null);
+    setUserRole('company');
+    setSelectedTripId(null);
+    setActiveView('dashboard');
   };
 
   const fetchShipments = async (companyId: string) => {
@@ -422,10 +430,11 @@ export default function Page() {
       })()
     )
   ) : isAuthenticated ? (
-    <section className="rounded-[2rem] border border-rose-900/70 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
-      <h2 className="text-2xl font-semibold text-white">Account access is unavailable</h2>
-      <p className="mt-3 text-slate-400">Your account is not linked to an approved company or driver profile.</p>
-    </section>
+    <DashboardView
+      companyId={organization?.id}
+      companyName={organization?.name ?? 'Default Company'}
+      shipments={shipments}
+    />
   ) : (
     <AuthView existingOrg={organization} onLogin={handleLogin} onRegister={handleRegister} />
   );
