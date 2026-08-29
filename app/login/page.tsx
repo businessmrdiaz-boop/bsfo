@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
 type Role = 'company' | 'driver';
@@ -9,6 +9,7 @@ type Mode = 'login' | 'register';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [role, setRole] = useState<Role>('company');
   const [mode, setMode] = useState<Mode>('login');
@@ -21,6 +22,21 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const requestedRole = searchParams.get('role');
+    const company = searchParams.get('company');
+    const token = searchParams.get('token');
+
+    if (requestedRole === 'driver') {
+      setRole('driver');
+      setMode('login');
+    }
+
+    if (company && token) {
+      setNotice(`Invitation ready. Sign in as a driver to continue with company ${company}.`);
+    }
+  }, [searchParams]);
 
   const handleRoleChange = (nextRole: Role) => {
     setRole(nextRole);

@@ -53,14 +53,35 @@ interface AuthViewProps {
 
 export function DashboardView({ companyId, companyName, shipments }: DashboardViewProps) {
   const [inviteLink, setInviteLink] = useState<string>('');
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   const generateInviteLink = () => {
     if (typeof window === 'undefined' || !companyId) {
       return;
     }
 
-    const link = `${window.location.origin}/join-driver?company=${companyId}`;
-    setInviteLink(link);
+    const token = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const url = new URL('/join-driver', window.location.origin);
+    url.searchParams.set('company', companyId);
+    url.searchParams.set('token', token);
+    url.searchParams.set('role', 'driver');
+
+    setInviteLink(url.toString());
+    setCopyState('idle');
+  };
+
+  const handleCopyInvite = async () => {
+    if (!inviteLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopyState('copied');
+      window.setTimeout(() => setCopyState('idle'), 1800);
+    } catch {
+      setCopyState('idle');
+    }
   };
 
   return (
@@ -72,36 +93,39 @@ export function DashboardView({ companyId, companyName, shipments }: DashboardVi
           ))}
         </div>
 
-        <div className="rounded-[2rem] border border-slate-800/80 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
           <div className="mb-6">
-            <p className="text-sm uppercase tracking-[0.3em] text-cyan-400">Driver Onboarding</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Share Driver Access</h2>
-            <p className="mt-3 text-slate-400">
-              Generate an invite link to share with drivers so they can connect to {companyName ?? 'your company'}.
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Driver Onboarding</p>
+            <h2 className="mt-3 text-3xl font-semibold text-slate-900">Share Driver Access</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Generate a secure invite link for drivers to join {companyName ?? 'your company'} and continue to the driver sign-in flow.
             </p>
           </div>
 
           <button
             type="button"
             onClick={generateInviteLink}
-            className="inline-flex items-center justify-center rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
           >
             Generate Invite Link
           </button>
 
           {inviteLink && (
-            <div className="mt-6 rounded-3xl border border-slate-800 bg-slate-950/90 p-4">
-              <p className="text-sm text-slate-400">Driver invite URL</p>
-              <div className="mt-3 flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-900 px-4 py-3">
-                <span className="truncate text-sm text-slate-100">{inviteLink}</span>
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-600">Driver invite URL</p>
+              <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <span className="truncate text-sm text-slate-800">{inviteLink}</span>
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard.writeText(inviteLink)}
-                  className="rounded-2xl bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700"
+                  onClick={handleCopyInvite}
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
                 >
-                  Copy
+                  {copyState === 'copied' ? 'Copied' : 'Copy'}
                 </button>
               </div>
+              {copyState === 'copied' && (
+                <p className="mt-3 text-sm text-emerald-600">Invite link copied to your clipboard.</p>
+              )}
             </div>
           )}
         </div>
